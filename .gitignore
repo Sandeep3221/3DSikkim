@@ -32,3 +32,7 @@ dist-ssr/
 *.njsproj
 *.sln
 *.sw?
+
+# Local terrain pipeline cache (regenerate via npm run build:terrain)
+terrain-cache
+

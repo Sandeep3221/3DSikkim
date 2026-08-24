@@ -8,13 +8,12 @@ import {
   earthQuaternion,
   type AnchorFrame,
 } from '../scroll/journey'
-import { GANGTOK_POINT, MAP_BASIS, mapCenterPoint } from '../../experience/sikkimRelief'
+import { gangtokWorldPoint, stateCenterWorld, GEO_BASIS } from '../../experience/sikkimWorld'
 
 /**
- * World-space mirror of the map-frame constants. The earth group carries a
- * fixed yaw past p≈0.52 plus the axial tilt; these vectors apply that
- * rotation so the late keyframes (flight → arrival → map) are expressed in
- * true world coordinates. Refreshed on every evalCameraPose call.
+ * World-space anchors for the late (flight → arrival → interactive) phase.
+ * The earth group carries a fixed yaw plus axial tilt; these are refreshed
+ * on every evalCameraPose call using the real Sikkim geography.
  */
 const G_WORLD = new THREE.Vector3()
 const C_WORLD = new THREE.Vector3()
@@ -25,11 +24,11 @@ const _mq = new THREE.Quaternion()
 
 function updateMapWorldPoints(progress: number): void {
   earthQuaternion(progress, _mq)
-  G_WORLD.copy(GANGTOK_POINT).applyQuaternion(_mq)
-  C_WORLD.copy(mapCenterPoint(0)).applyQuaternion(_mq)
-  MU_WORLD.copy(MAP_BASIS.up).applyQuaternion(_mq)
-  ME_WORLD.copy(MAP_BASIS.east).applyQuaternion(_mq)
-  MN_WORLD.copy(MAP_BASIS.north).applyQuaternion(_mq)
+  gangtokWorldPoint(progress, G_WORLD)
+  stateCenterWorld(progress, 0, C_WORLD)
+  MU_WORLD.copy(GEO_BASIS.up).applyQuaternion(_mq)
+  ME_WORLD.copy(GEO_BASIS.east).applyQuaternion(_mq)
+  MN_WORLD.copy(GEO_BASIS.north).applyQuaternion(_mq)
 }
 
 /**

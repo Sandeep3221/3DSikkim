@@ -15,7 +15,7 @@ import {
 import { heightAt, PATCH_HALF } from './terrainField'
 import { getUiState } from '../systems/ui/uiStore'
 import { DESTINATIONS } from '../data/destinations'
-import { destinationFocusPose } from './sikkimRelief'
+import { destinationFocusPose } from './sikkimWorld'
 
 /**
  * Applies the choreographed camera pose with exponential damping so motion
@@ -77,10 +77,15 @@ export default function CameraController() {
     }
   }, [])
 
-  useFrame((_state, delta) => {
+    useFrame((_state, delta) => {
     const dt = Math.min(delta, 0.1)
     const p = scrollState.progress
     const rm = prefersReducedMotion()
+    const ui = getUiState()
+
+    // When a cinematic dive is active, the DestinationCameraRoute component
+    // owns the camera — the scroll-driven choreography must not fight it.
+    if (ui.diving) return
 
     evalCameraPose(p, desired)
 
@@ -93,14 +98,14 @@ export default function CameraController() {
       desired.target.lerp(rest.target, 0.65)
     }
 
-    // Interactive destination focus (map phase only).
-    const selected = getUiState().selectedId
-    const targetWeight = p > 0.9 && selected ? 1 : 0
+        // Interactive destination focus (map phase only, not while diving).
+    const selected = ui.selectedId
+    const targetWeight = p > 0.9 && selected && !ui.diving ? 1 : 0
     focusWeight += (targetWeight - focusWeight) * (1 - Math.exp(-2.6 * dt))
     if (focusWeight > 0.001 && selected) {
       const dest = DESTINATIONS.find((d) => d.id === selected)
       if (dest) {
-        destinationFocusPose(p, dest.coords.lat, dest.coords.lon, focus.position, focus.target)
+                destinationFocusPose(p, dest.coords.lat, dest.coords.lon, 1.4, focus.position, focus.target)
         desired.position.lerp(focus.position, focusWeight)
         desired.target.lerp(focus.target, focusWeight)
         desired.fov += (40 - desired.fov) * focusWeight

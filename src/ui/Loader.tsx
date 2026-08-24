@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
 import { useProgress } from '@react-three/drei'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Loading state — part of the experience, not a spinner. Restrained
@@ -17,7 +17,6 @@ export default function Loader() {
     // Complete when loading finishes — or when an asset errors out, so the
     // loader can never stick at a fake 99%.
     if ((!active && progress >= 100) || errors.length > 0) {
-      // Enforce a minimum dwell so the opening never flashes.
       const remaining = Math.max(0, 1100 - (performance.now() - mountedAt.current))
       const t = setTimeout(() => setDone(true), remaining)
       return () => clearTimeout(t)
@@ -47,7 +46,6 @@ export default function Loader() {
         <div className="h-full bg-bone transition-[width] duration-300" style={{ width: `${progress}%` }} />
       </div>
       <p className="meta mt-4">Initializing Terrain</p>
-
       <div className="meta absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
         27°42′ N — 88°08′ E
       </div>

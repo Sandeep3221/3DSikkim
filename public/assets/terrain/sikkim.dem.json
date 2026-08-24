@@ -1,0 +1,17 @@
+{
+  "format": "Uint16LE",
+  "width": 1536,
+  "height": 2304,
+  "bounds": {
+    "west": 88,
+    "south": 27,
+    "east": 89,
+    "north": 28.5
+  },
+  "minM": 183,
+  "maxM": 8561,
+  "source": "Copernicus DEM GLO-30 (ESA/Copernicus), AWS Registry of Open Data",
+  "license": "CC BY 4.0",
+  "attribution": "Contains modified Copernicus Sentinel-1 data / Copernicus DEM (2022). © European Space Agency — https://doi.org/10.5270/ESA-c5d3d65",
+  "notes": "Pipeline: scripts/build-sikkim-dem.mjs. Values are elevation in metres above sea level."
+}

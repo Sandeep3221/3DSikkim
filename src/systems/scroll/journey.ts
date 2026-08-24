@@ -88,6 +88,74 @@ export const SEGMENTS: JourneySegment[] = [
   { id: 'experience', label: 'THE EXPERIENCE', start: 0.92, end: 1.0 },
 ]
 
+/* ------------------------------------------------------------------ */
+/* Destination cinematic dive stages. These are TIME-based, not scroll  */
+/* driven — they activate when uiStore.selectedId is set and the        */
+/* destination camera route takes over from the scroll-progress camera.  */
+/* ------------------------------------------------------------------ */
+
+export interface DiveStage {
+  /** Normalized time within the dive (0 → 1). */
+  t: number
+  /** Camera FOV at this moment. */
+  fov: number
+  /** Meter altitude above the destination surface. */
+  altitudeM: number
+  /** Fraction [0,1] of the way from origin to destination. */
+  fraction: number
+  /** Label shown during this stage. */
+  label?: string
+}
+
+/**
+ * Build the 8-stage cinematic dive curve for a destination.
+ * Each stage corresponds to the camera route architecture:
+ *   A. TARGET LOCK → B. ORIENTATION → C. REGIONAL APPROACH
+ *   → D. DESCENT → E. TERRAIN APPROACH → F. DESTINATION REVEAL
+ *   → G. ARRIVAL → H. UI REVEAL
+ */
+export function buildDiveStages(altitudeM: number, regionDist: number): DiveStage[] {
+  // originDist: how far above the Sikkim overview the dive begins
+  const originAlt = 4.2 // scene units (~265 km)
+  const targetAlt = altitudeM * (1 / 63710) // convert meters to scene units
+  return [
+    // A. TARGET LOCK — lock onto the destination
+    { t: 0.0, fov: 46, altitudeM: originAlt * 63710, fraction: 0.0 },
+    // B. ORIENTATION — orient the camera toward the destination
+    { t: 0.08, fov: 44, altitudeM: originAlt * 63710, fraction: 0.05 },
+    // C. REGIONAL APPROACH — begin closing distance regionally
+    { t: 0.18, fov: 42, altitudeM: originAlt * 63710 * 0.7, fraction: 0.18 },
+    // D. DESCENT — descend through the terrain
+    { t: 0.32, fov: 40, altitudeM: originAlt * 63710 * 0.4, fraction: 0.42 },
+    // E. TERRAIN APPROACH — get close to the terrain
+    { t: 0.48, fov: 38, altitudeM: originAlt * 63710 * 0.15, fraction: 0.68 },
+    // F. DESTINATION REVEAL — reveal the destination
+    {
+      t: 0.68,
+      fov: 36,
+      altitudeM: altitudeM * 1.6,
+      fraction: 0.9,
+      label: 'DESTINATION REVEAL',
+    },
+    // G. ARRIVAL — settle into the final viewpoint
+    {
+      t: 0.85,
+      fov: 40,
+      altitudeM: altitudeM,
+      fraction: 1.0,
+      label: 'ARRIVAL',
+    },
+    // H. UI REVEAL — reveal destination information
+    {
+      t: 1.0,
+      fov: 40,
+      altitudeM: altitudeM,
+      fraction: 1.0,
+      label: 'UI REVEAL',
+    },
+  ]
+}
+
 export const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)
 
 /** Hermite smoothstep on 0→1. */

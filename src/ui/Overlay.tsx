@@ -1,18 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import gsap from 'gsap'
 import { SEGMENT_EVENT } from '../systems/scroll/ScrollProvider'
 import { scrollState } from '../systems/scroll/scrollState'
 import { segmentAt, type JourneySegment } from '../systems/scroll/journey'
 import { prefersReducedMotion } from '../systems/performance/motion'
-import { useUiState, selectDestination } from '../systems/ui/uiStore'
+import { useUiState, selectDestination, getUiState, endDive, setArrived } from '../systems/ui/uiStore'
 import { DESTINATIONS } from '../data/destinations'
-
-/**
- * Journey UI: editorial captions keyed to segments (phases 1–6), resolving
- * into the world-as-UI travel interface — a live destination list bound to
- * the 3D relief map — during the interactive-experience phase.
- */
+import { smoothRange } from '../systems/scroll/journey'
 
 const CAPTIONS: Record<
   string,
@@ -37,13 +32,13 @@ const CAPTIONS: Record<
     kicker: 'Sacred Summit',
     title: 'KANCHENJUNGA',
     titleClass: 'text-[13vw] leading-none md:text-8xl tracking-[0.06em]',
-    meta: '8,586 M — 27°42′ N · 88°08′ E',
+    meta: '8,586 M - 27°42′ N · 88°08′ E',
     center: true,
   },
   flight: {
     kicker: 'Mountain Flight',
     title: 'INTO SIKKIM',
-    body: 'Ridges, valleys and cloud — descending into the eastern Himalaya.',
+    body: 'Ridges, valleys and cloud - descending into the eastern Himalaya.',
   },
   arrival: {
     kicker: '27° N · 88° E',
@@ -68,7 +63,6 @@ export default function Overlay() {
   const { mapActive, selectedId } = useUiState()
   const selected = DESTINATIONS.find((d) => d.id === selectedId) ?? null
 
-  // Segment swaps drive the caption block (GSAP entrance, instant under reduced motion).
   useEffect(() => {
     const onSegment = (e: Event) => {
       const seg = (e as CustomEvent<JourneySegment>).detail
@@ -91,7 +85,6 @@ export default function Overlay() {
     return () => window.removeEventListener(SEGMENT_EVENT, onSegment)
   }, [])
 
-  // Progress rail + hint dismissal — rAF reads the shared state directly.
   useEffect(() => {
     let raf = 0
     const tick = () => {
@@ -113,12 +106,15 @@ export default function Overlay() {
   const showExperienceUI = mapActive
   const caption = CAPTIONS[segment.id] ?? {}
 
+  const { diving } = getUiState()
+  const divingDestination = diving && selectedId
+    ? DESTINATIONS.find((d) => d.id === selectedId)
+    : null
+
   return (
     <div className="pointer-events-none fixed inset-0 z-10 select-none">
-      {/* Photographic vignette */}
       <div aria-hidden="true" className="vignette absolute inset-0" />
 
-      {/* Top bar — journey kicker resolves into navigation */}
       <header className="absolute inset-x-0 top-0 flex items-start justify-between p-6 md:p-8">
         <Link to="/" className="kicker pointer-events-auto focus-visible:outline-none">
           3DSikkim
@@ -126,7 +122,7 @@ export default function Overlay() {
         <nav
           aria-label="Primary"
           className={`pointer-events-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1 transition-opacity duration-1000 md:gap-6 ${
-            showExperienceUI ? 'opacity-100' : 'opacity-25 hover:opacity-90'
+            showExperienceUI && !diving ? 'opacity-100' : 'opacity-0'
           }`}
         >
           {NAV_LINKS.slice(1).map((l) => (
@@ -141,7 +137,6 @@ export default function Overlay() {
         </nav>
       </header>
 
-      {/* Segment caption, resolving into the map interface */}
       <main className="absolute inset-0">
         {!showExperienceUI ? (
           <div
@@ -165,22 +160,22 @@ export default function Overlay() {
             ) : null}
             {caption.meta ? <p className="meta mt-4">{caption.meta}</p> : null}
           </div>
+        ) : divingDestination ? (
+          <DiveInterface destination={divingDestination} arrived={getUiState().arrived} />
         ) : (
           <MapInterface selected={selected} />
         )}
       </main>
 
-      {/* Bottom bar: coordinates · segment label */}
       <footer className="absolute inset-x-0 bottom-0 flex items-end justify-between p-6 md:p-8">
-        <p className="meta">27°42′09″ N — 88°08′51″ E · Sikkim, India</p>
+        <p className="meta">27°42 N — 88°08 E · Sikkim, India</p>
         <p className="kicker hidden md:block">{segment.label}</p>
       </footer>
 
-      {/* Progress rail */}
       <div
         aria-hidden="true"
         className={`absolute right-6 top-1/2 hidden h-44 w-px -translate-y-1/2 bg-white/15 transition-opacity duration-700 md:block ${
-          showExperienceUI ? 'opacity-0' : 'opacity-100'
+          showExperienceUI && !diving ? 'opacity-0' : 'opacity-100'
         }`}
       >
         <div
@@ -190,11 +185,10 @@ export default function Overlay() {
         />
       </div>
 
-      {/* Scroll hint */}
       <p
-        aria-hidden={!showHint || showExperienceUI}
+        aria-hidden={!showHint || showExperienceUI || diving}
         className={`kicker absolute bottom-24 right-6 transition-opacity duration-700 md:right-8 ${
-          showHint && !showExperienceUI ? 'opacity-100' : 'opacity-0'
+          showHint && !showExperienceUI && !diving ? 'opacity-100' : 'opacity-0'
         }`}
       >
         Scroll ↓
@@ -203,12 +197,11 @@ export default function Overlay() {
   )
 }
 
-/* ------------------------- world-as-UI interface ------------------------- */
+/* world-as-UI interface */
 
 function MapInterface({ selected }: { selected: (typeof DESTINATIONS)[number] | null }) {
   return (
     <div className="absolute inset-x-0 bottom-16 top-20 flex flex-col justify-end gap-3 px-5 pb-2 md:flex-row md:items-end md:justify-between md:gap-8 md:px-12">
-      {/* Selected destination panel — appears over the world it belongs to */}
       <div aria-live="polite" className="pointer-events-auto order-1 w-full max-w-sm self-start md:self-auto">
         {selected ? (
           <div className="max-h-[42vh] overflow-y-auto border border-white/10 bg-black/45 p-4 backdrop-blur-sm md:max-h-none md:p-6">
@@ -240,11 +233,7 @@ function MapInterface({ selected }: { selected: (typeof DESTINATIONS)[number] | 
         ) : null}
       </div>
 
-      {/* Destination list — the accessible twin of the 3D markers */}
-      <nav
-        aria-label="Destinations on the map"
-        className="pointer-events-auto order-2 transition-opacity duration-1000"
-      >
+      <nav aria-label="Destinations on the map" className="pointer-events-auto order-2 transition-opacity duration-1000">
         <p className="kicker mb-2 hidden md:block">Select a destination</p>
         <ul className="flex flex-wrap gap-2 md:flex-col md:space-y-1.5 md:space-y-reverse md:gap-0">
           {DESTINATIONS.map((d) => (
@@ -253,7 +242,7 @@ function MapInterface({ selected }: { selected: (typeof DESTINATIONS)[number] | 
                 type="button"
                 aria-pressed={selected?.id === d.id}
                 onClick={() => selectDestination(selected?.id === d.id ? null : d.id)}
-                className={`border px-3 py-1.5 text-left font-mono text-[11px] uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-mist md:w-full md:border-b-0 md:border-l md:py-1 md:pl-3 md:tracking-[0.22em] ${
+                className={`border px-3 py-1.5 text-left font-mono text-[11px] uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-mist ${
                   selected?.id === d.id
                     ? 'border-bone bg-black/40 text-bone'
                     : 'border-white/25 bg-black/30 text-faint hover:border-white/60 hover:text-mist'
@@ -265,6 +254,99 @@ function MapInterface({ selected }: { selected: (typeof DESTINATIONS)[number] | 
           ))}
         </ul>
       </nav>
+    </div>
+  )
+}
+
+/* destination dive interface */
+
+function DiveInterface({
+  destination,
+  arrived,
+}: {
+  destination: (typeof DESTINATIONS)[number]
+  arrived: boolean
+}) {
+  const { diving, diveProgress } = getUiState()
+
+  if (arrived) {
+    return (
+      <div className="absolute inset-x-0 bottom-16 top-20 flex flex-col justify-end gap-4 px-5 pb-2 md:flex-row md:items-end md:justify-between md:gap-8 md:px-12">
+        <div aria-live="polite" className="pointer-events-auto w-full max-w-sm self-start md:max-w-md md:self-auto">
+          <div className="border border-white/10 bg-black/45 p-4 backdrop-blur-sm md:p-6">
+            <p className="kicker mb-2">{destination.meta.region}</p>
+            <h2 className="display text-2xl uppercase tracking-[0.12em]">{destination.name}</h2>
+            <p className="meta mt-2">
+              {destination.coords.lat.toFixed(2)}° N · {destination.coords.lon.toFixed(2)}° E · ≈{' '}
+              {destination.elevationM.toLocaleString('en-IN')} m
+            </p>
+            <p className="mt-3 font-serif text-sm leading-relaxed text-bone/85">
+              {destination.tagline}. {destination.description}
+            </p>
+            <div className="mt-4 flex items-center justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  endDive()
+                  setArrived(false)
+                  selectDestination(null)
+                }}
+                className="meta transition-colors hover:text-bone focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-mist/70"
+              >
+                ← Sikkim
+              </button>
+              <Link
+                to={`/destinations/${destination.slug}`}
+                className="border border-bone/40 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.28em] text-bone transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-mist"
+              >
+                Open {destination.name} →
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <nav aria-label="Destinations on the map" className="pointer-events-auto">
+          <p className="kicker mb-2 hidden md:block">Select another destination</p>
+          <ul className="flex flex-wrap gap-2 md:flex-col md:gap-0">
+            {DESTINATIONS.map((d) => (
+              <li key={d.id}>
+                <button
+                  type="button"
+                  aria-pressed={d.id === destination.id}
+                  onClick={() => {
+                    if (d.id !== destination.id) selectDestination(d.id)
+                  }}
+                  className={`border px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] transition-all focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-mist ${
+                    d.id === destination.id
+                      ? 'border-bone bg-black/40 text-bone'
+                      : 'border-white/25 bg-black/30 text-faint hover:border-white/60 hover:text-mist'
+                  }`}
+                >
+                  {d.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+    )
+  }
+
+  return (
+    <div className="absolute inset-x-0 bottom-24 left-6 md:left-12">
+      <p className="kicker mb-3">APPROACHING</p>
+      <h2 className="display text-2xl uppercase tracking-[0.14em] md:text-4xl">
+        {destination.name}
+      </h2>
+      <div className="mt-4 h-px w-48 overflow-hidden bg-white/10">
+        <div
+          className="h-full bg-bone transition-[width] duration-300"
+          style={{ width: `${(diving ? diveProgress : 0) * 100}%` }}
+        />
+      </div>
+      <p className="meta mt-2">
+        {destination.coords.lat.toFixed(2)}° N · {destination.coords.lon.toFixed(2)}° E
+      </p>
     </div>
   )
 }
