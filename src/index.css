@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: Georgia, "Times New Roman", Times, serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --color-bone: #e8e6e1;
+  --color-mist: #9fb2c4;
+  /* ≥4.5:1 contrast on pure black for small mono text (WCAG AA). */
+  --color-faint: #74879b;
+}
+
+html {
+  background: #000;
+  scrollbar-width: thin;
+  scrollbar-color: #3a4650 #000;
+}
+
+body {
+  background: #000;
+  color: var(--color-bone);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(159, 178, 196, 0.25);
+}
+
+/* Editorial typography primitives */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: var(--color-mist);
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--color-bone);
+}
+
+.meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+
+/* Soft photographic vignette over the canvas */
+.vignette {
+  background: radial-gradient(ellipse at center, transparent 52%, rgba(0, 0, 0, 0.45) 100%);
+}
