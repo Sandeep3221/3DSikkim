@@ -114,21 +114,20 @@ export interface DiveStage {
  *   → D. DESCENT → E. TERRAIN APPROACH → F. DESTINATION REVEAL
  *   → G. ARRIVAL → H. UI REVEAL
  */
-export function buildDiveStages(altitudeM: number, regionDist: number): DiveStage[] {
-  // originDist: how far above the Sikkim overview the dive begins
-  const originAlt = 4.2 // scene units (~265 km)
-  const targetAlt = altitudeM * (1 / 63710) // convert meters to scene units
+export function buildDiveStages(altitudeM: number, originAltM: number): DiveStage[] {
+  // Early stages hold the true origin altitude so the dive begins from
+  // exactly where the explorer camera is — no jolt.
   return [
     // A. TARGET LOCK — lock onto the destination
-    { t: 0.0, fov: 46, altitudeM: originAlt * 63710, fraction: 0.0 },
+    { t: 0.0, fov: 46, altitudeM: originAltM, fraction: 0.0 },
     // B. ORIENTATION — orient the camera toward the destination
-    { t: 0.08, fov: 44, altitudeM: originAlt * 63710, fraction: 0.05 },
+    { t: 0.08, fov: 44, altitudeM: originAltM, fraction: 0.05 },
     // C. REGIONAL APPROACH — begin closing distance regionally
-    { t: 0.18, fov: 42, altitudeM: originAlt * 63710 * 0.7, fraction: 0.18 },
+    { t: 0.18, fov: 42, altitudeM: lerpAlt(originAltM, altitudeM * 3.2, 0.35), fraction: 0.18 },
     // D. DESCENT — descend through the terrain
-    { t: 0.32, fov: 40, altitudeM: originAlt * 63710 * 0.4, fraction: 0.42 },
+    { t: 0.32, fov: 40, altitudeM: lerpAlt(originAltM, altitudeM * 2.4, 0.7), fraction: 0.42 },
     // E. TERRAIN APPROACH — get close to the terrain
-    { t: 0.48, fov: 38, altitudeM: originAlt * 63710 * 0.15, fraction: 0.68 },
+    { t: 0.48, fov: 38, altitudeM: altitudeM * 1.9, fraction: 0.68 },
     // F. DESTINATION REVEAL — reveal the destination
     {
       t: 0.68,
@@ -154,6 +153,10 @@ export function buildDiveStages(altitudeM: number, regionDist: number): DiveStag
       label: 'UI REVEAL',
     },
   ]
+}
+
+function lerpAlt(a: number, b: number, t: number): number {
+  return a + (b - a) * t
 }
 
 export const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v)

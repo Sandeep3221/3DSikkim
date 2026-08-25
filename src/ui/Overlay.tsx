@@ -1,13 +1,12 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import gsap from 'gsap'
 import { SEGMENT_EVENT } from '../systems/scroll/ScrollProvider'
 import { scrollState } from '../systems/scroll/scrollState'
 import { segmentAt, type JourneySegment } from '../systems/scroll/journey'
 import { prefersReducedMotion } from '../systems/performance/motion'
-import { useUiState, selectDestination, getUiState, endDive, setArrived } from '../systems/ui/uiStore'
+import { useUiState, selectDestination, getUiState, endDive, setArrived, diveRuntime } from '../systems/ui/uiStore'
 import { DESTINATIONS } from '../data/destinations'
-import { smoothRange } from '../systems/scroll/journey'
 
 const CAPTIONS: Record<
   string,
@@ -60,7 +59,8 @@ export default function Overlay() {
   const captionRef = useRef<HTMLDivElement>(null)
   const railRef = useRef<HTMLDivElement>(null)
   const [showHint, setShowHint] = useState(true)
-  const { mapActive, selectedId } = useUiState()
+  const diveBarRef = useRef<HTMLDivElement | null>(null)
+  const { mapActive, selectedId, diving } = useUiState()
   const selected = DESTINATIONS.find((d) => d.id === selectedId) ?? null
 
   useEffect(() => {
@@ -91,6 +91,10 @@ export default function Overlay() {
       if (railRef.current) {
         railRef.current.style.transform = `scaleY(${scrollState.progress})`
       }
+      // Destination-dive progress bar — imperative, no React state per frame.
+      if (diveBarRef.current) {
+        diveBarRef.current.style.width = `${(diveRuntime.progress * 100).toFixed(1)}%`
+      }
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -106,7 +110,6 @@ export default function Overlay() {
   const showExperienceUI = mapActive
   const caption = CAPTIONS[segment.id] ?? {}
 
-  const { diving } = getUiState()
   const divingDestination = diving && selectedId
     ? DESTINATIONS.find((d) => d.id === selectedId)
     : null
@@ -161,7 +164,7 @@ export default function Overlay() {
             {caption.meta ? <p className="meta mt-4">{caption.meta}</p> : null}
           </div>
         ) : divingDestination ? (
-          <DiveInterface destination={divingDestination} arrived={getUiState().arrived} />
+          <DiveInterface destination={divingDestination} arrived={getUiState().arrived} barRef={diveBarRef} />
         ) : (
           <MapInterface selected={selected} />
         )}
@@ -263,11 +266,12 @@ function MapInterface({ selected }: { selected: (typeof DESTINATIONS)[number] | 
 function DiveInterface({
   destination,
   arrived,
+  barRef,
 }: {
   destination: (typeof DESTINATIONS)[number]
   arrived: boolean
+  barRef: React.RefObject<HTMLDivElement | null>
 }) {
-  const { diving, diveProgress } = getUiState()
 
   if (arrived) {
     return (
@@ -341,7 +345,7 @@ function DiveInterface({
       <div className="mt-4 h-px w-48 overflow-hidden bg-white/10">
         <div
           className="h-full bg-bone transition-[width] duration-300"
-          style={{ width: `${(diving ? diveProgress : 0) * 100}%` }}
+          style={{ width: 0 }} ref={barRef}
         />
       </div>
       <p className="meta mt-2">

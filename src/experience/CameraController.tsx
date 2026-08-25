@@ -47,7 +47,10 @@ const _rel = new THREE.Vector3()
 let focusWeight = 0
 
 function clampAboveTerrain(camera: THREE.Camera, p: number): void {
-  if (p < 0.5) return
+  // Journey-scale procedural clamp only. The real DEM world (map phase) has
+  // its own terrain-safe hover altitudes; the procedural heightfield's frame
+  // is invalid there, so the clamp must not fight the dive/explorer camera.
+  if (p < 0.5 || p > 0.84) return
   worldToEarthLocal(p, _local.copy(camera.position))
   const alt = _local.length()
   const relU = _rel.copy(_local).sub(SITE_CENTER).dot(EAST_LOCAL)
@@ -105,7 +108,7 @@ export default function CameraController() {
     if (focusWeight > 0.001 && selected) {
       const dest = DESTINATIONS.find((d) => d.id === selected)
       if (dest) {
-                destinationFocusPose(p, dest.coords.lat, dest.coords.lon, 1.4, focus.position, focus.target)
+                destinationFocusPose(p, dest.coords.lat, dest.coords.lon, 600, focus.position, focus.target)
         desired.position.lerp(focus.position, focusWeight)
         desired.target.lerp(focus.target, focusWeight)
         desired.fov += (40 - desired.fov) * focusWeight

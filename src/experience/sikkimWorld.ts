@@ -92,21 +92,31 @@ export function gangtokWorldPoint(progress: number, out = new THREE.Vector3()): 
 /**
  * World-space focus pose hovering over a destination at its real elevation.
  * Used by the destination cinematic dive (Mode 3) and explorer.
+ *
+ * hoverM is metres ABOVE TERRAIN. The hover base uses the higher of the
+ * destination's and the viewpoint's real DEM elevations, so the camera can
+ * never end up below the surrounding relief.
  */
 export function destinationFocusPose(
   progress: number,
   lat: number,
   lon: number,
-  arrivalAltitudeM: number,
+  hoverM: number,
   outPosition: THREE.Vector3,
   outTarget: THREE.Vector3,
 ): void {
   earthQuaternion(progress, _q)
-  const elev = getElevationMAtLatLon(lat, lon)
-  const m = latLonToWorldEarthLocal(lat, lon, elev + 30, outTarget).applyQuaternion(_q)
-  // Choose a south-west vantage so the clutter/border of the scene reads naturally.
+  const elevDest = getElevationMAtLatLon(lat, lon)
+  // Vantage sits south-west of the target; use the higher of the two real
+  // elevations as the base so the camera stays above intervening ridges.
+  const vLat = lat - 0.05
+  const vLon = lon - 0.04
+  const elevView = getElevationMAtLatLon(vLat, vLon)
+  const base = Math.max(elevDest, elevView)
+
+  latLonToWorldEarthLocal(lat, lon, elevDest + 30, outTarget).applyQuaternion(_q)
   outPosition
-    .copy(latLonToWorldEarthLocal(lat - 0.06, lon - 0.045, elev + arrivalAltitudeM, _u))
+    .copy(latLonToWorldEarthLocal(vLat, vLon, base + hoverM, _u))
     .applyQuaternion(_q)
 }
 

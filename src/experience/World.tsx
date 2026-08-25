@@ -1,9 +1,9 @@
-﻿import { useFrame } from '@react-three/fiber'
+import { useFrame } from '@react-three/fiber'
 import { Suspense, useRef } from 'react'
 import * as THREE from 'three'
 import { scrollState } from '../systems/scroll/scrollState'
 import { EARTH_TILT_QUAT, earthYaw } from '../systems/scroll/journey'
-import { setMapActive, getUiState } from '../systems/ui/uiStore'
+import { setMapActive } from '../systems/ui/uiStore'
 import { applyTerrainCrossfade } from './terrainFade'
 import Earth from './Earth'
 import { CloudLayer, FlightClouds, PeakClouds } from './Clouds'
@@ -29,7 +29,6 @@ export default function World() {
     setMapActive(p > 0.92)
   })
 
-  const ui = getUiState()
 
   return (
     <>
@@ -54,7 +53,7 @@ export default function World() {
       <Lighting />
       <CameraController />
       <DestinationCameraRoute />
-      <InteractiveOrbitControls enabled={ui.mapActive && !ui.diving && !ui.arrived} />
+      <InteractiveOrbitControls />
     </>
   )
 }

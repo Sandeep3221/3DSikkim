@@ -3,9 +3,12 @@ import { useSyncExternalStore } from 'react'
 /**
  * Shared UI/experience state for the world-as-UI phase: whether the journey
  * has resolved into the interactive map, which destination is focused, and
- * the cinematic-dive progress (time-based camera route) when one is active.
- * Plain module store + useSyncExternalStore so both React components and
- * useFrame loops can read it without re-render churn.
+ * whether a cinematic dive is in progress.
+ *
+ * IMPORTANT: per-frame values (like dive progress) must NEVER live here.
+ * Every emit re-renders all subscribers — a per-frame emit caused a fatal
+ * freeze (terrain geometry rebuilt 60×/s). Per-frame values live in the
+ * imperative `diveRuntime` module below, read inside useFrame/rAF loops.
  */
 
 export interface UiState {
@@ -15,10 +18,8 @@ export interface UiState {
   selectedId: string | null
   /** True once the cinematic dive has physically arrived at the destination. */
   arrived: boolean
-  /** True during the cinematic camera dive (camera is travelling to destination). */
+  /** True while the cinematic camera route owns the camera. */
   diving: boolean
-  /** Elapsed normalized time within the current dive (0 → 1), for the 8-stage route. */
-  diveProgress: number
 }
 
 let state: UiState = {
@@ -26,7 +27,6 @@ let state: UiState = {
   selectedId: null,
   arrived: false,
   diving: false,
-  diveProgress: 0,
 }
 const listeners = new Set<() => void>()
 
@@ -46,26 +46,26 @@ export function selectDestination(id: string | null): void {
       selectedId: id,
       arrived: false,
       diving: id !== null,
-      diveProgress: 0,
     })
+    diveRuntime.progress = 0
   }
 }
 
-export function setDiveProgress(t: number): void {
-  if (state.diving && state.diveProgress !== t)
-    emit({ ...state, diveProgress: t })
-}
+/** Imperative, render-free dive progress (0 → 1). Read in rAF/useFrame only. */
+export const diveRuntime = { progress: 0 }
 
 export function setArrived(arrived: boolean): void {
   if (state.arrived !== arrived) emit({ ...state, arrived })
 }
 
 export function endDive(): void {
-  emit({ ...state, diving: false, diveProgress: 0 })
+  diveRuntime.progress = 0
+  if (state.diving) emit({ ...state, diving: false })
 }
 
 export function resetExperience(): void {
-  emit({ mapActive: false, selectedId: null, arrived: false, diving: false, diveProgress: 0 })
+  diveRuntime.progress = 0
+  emit({ mapActive: false, selectedId: null, arrived: false, diving: false })
 }
 
 /* Imperative getters for animation loops (no subscription). */

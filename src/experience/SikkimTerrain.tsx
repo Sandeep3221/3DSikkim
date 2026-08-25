@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { DESTINATIONS } from '../data/destinations'
 import { scrollState } from '../systems/scroll/scrollState'
 import { QUALITY } from '../systems/performance/quality'
+import { smoothRange } from '../systems/scroll/journey'
 import {
   SIKKIM_BOUNDS,
   createTerrainPatchGeometry,
@@ -18,9 +19,9 @@ import { registerFadeMaterial, unregisterFadeMaterial } from './terrainFade'
  * distance-based Level of Detail:
  *
  *  LOD0  — one low-detail mesh over the whole state (always present).
- *  LOD2  — a high-detail patch around each destination, shown only when the
- *          camera is close to that place, so approaching somewhere reveals
- *          real high-resolution relief.
+ *  LOD2  — a high-detail patch around each destination. Opacity fades in
+ *          smoothly as the camera approaches, so detail emerges from the
+ *          haze rather than popping in as a rectangular tile.
  *
  * The whole surface conforms to the globe and crossfades in where the
  * cinematic journey ends.
@@ -28,7 +29,9 @@ import { registerFadeMaterial, unregisterFadeMaterial } from './terrainFade'
 
 const LOD0_SEGS: Record<string, number> = { high: 120, medium: 96, low: 80 }
 const PATCH_SEGS: Record<string, number> = { high: 170, medium: 140, low: 110 }
-const PATCH_SHOW_DIST = 2.6
+/** Camera distance range over which a detail patch fades in/out. */
+const PATCH_FAR = 3.4
+const PATCH_NEAR = 1.9
 const PATCH_HALF_DEG = 0.2
 
 export default function SikkimTerrain() {
@@ -55,28 +58,47 @@ export default function SikkimTerrain() {
   const lod0Mat = useRef<THREE.MeshStandardMaterial>(null)
   const patchMats = useRef<Array<THREE.MeshStandardMaterial | null>>([])
   const patchMeshes = useRef<Array<THREE.Mesh | null>>([])
-  const destWorld = useMemo(
-    () => DESTINATIONS.map(() => new THREE.Vector3()),
-    [],
-  )
+  const destWorld = useMemo(() => DESTINATIONS.map(() => new THREE.Vector3()), [])
 
-  // Register with the crossfade so the whole world fades in at journey end.
+  // LOD0 joins the journey→map crossfade. Detail patches manage their own
+  // opacity locally (journey fade × proximity) so they can fade smoothly
+  // with camera distance instead of popping in.
   useEffect(() => {
-    const mats = [lod0Mat.current, ...patchMats.current].filter(Boolean) as THREE.MeshStandardMaterial[]
-    mats.forEach((m) => registerFadeMaterial(m, 'map'))
+    const mat = lod0Mat.current
+    if (mat) registerFadeMaterial(mat, 'map')
     return () => {
-      mats.forEach((m) => unregisterFadeMaterial(m))
+      if (mat) unregisterFadeMaterial(mat)
     }
   }, [ready])
 
-  // Distance-based LOD: show a destination's detail patch when close.
+  useEffect(
+    () => () => {
+      lod0Geo?.dispose()
+      patchGeos.forEach((g) => g?.dispose())
+      patchMats.current.forEach((m) => m?.dispose())
+    },
+    [lod0Geo, patchGeos],
+  )
+
+  // Distance-based LOD with continuous fade — never a hard pop-in.
   useFrame(() => {
     const p = scrollState.progress
-    patchMeshes.current.forEach((mesh, i) => {
-      if (!mesh) return
+    const mapOp = smoothRange(p, 0.85, 0.9)
+
+    for (let i = 0; i < DESTINATIONS.length; i++) {
+      const mesh = patchMeshes.current[i]
+      const mat = patchMats.current[i]
+      if (!mesh || !mat) continue
+
       surfacePointWorld(p, DESTINATIONS[i].coords.lat, DESTINATIONS[i].coords.lon, 0, destWorld[i])
-      mesh.visible = camera.position.distanceTo(destWorld[i]) < PATCH_SHOW_DIST
-    })
+      const dist = camera.position.distanceTo(destWorld[i])
+      // 0 when far, 1 when near — smoothstep between the two distances.
+      const prox = 1 - smoothRange(dist, PATCH_NEAR, PATCH_FAR)
+      const op = mapOp * prox
+
+      mat.opacity = op
+      mesh.visible = op > 0.01
+    }
   })
 
   return (
@@ -105,6 +127,7 @@ export default function SikkimTerrain() {
               opacity={0}
               roughness={0.95}
               metalness={0}
+              depthWrite={false}
             />
           </mesh>
         ) : null,

@@ -1,99 +1,74 @@
-# 3DSikkim — Phase 1: Cinematic 3D World Foundation
+﻿# 3DSikkim
 
-A continuous scroll-driven cinematic journey: **SPACE → EARTH → INDIA → HIMALAYAS → KANCHENJUNGA → MOUNTAIN ENVIRONMENT**.
+A cinematic journey from deep space to the mountains of Sikkim, built with
+real geographic data.
+
+SPACE -> EARTH -> HIMALAYAS -> SIKKIM -> INTERACTIVE EXPLORER
+-> DESTINATION DIVE -> DESTINATION EXPERIENCE
 
 ## Stack
-
-- Vite 7 · React 19 · TypeScript (strict)
+- Vite 7 / React 19 / TypeScript (strict)
 - three.js + @react-three/fiber + @react-three/drei
-- GSAP (UI transitions) · Lenis (smooth scroll) · Tailwind CSS v4
+- GSAP + Lenis + Tailwind CSS v4
+- Copernicus DEM GLO-30 for real elevation data
 
-## Architecture
+## Terrain Pipeline
 
-```
-src/
-├── experience/            # 3D world
-│   ├── Experience.tsx     # Canvas host, adaptive DPR, tone mapping
-│   ├── World.tsx          # Scene assembly — terrain is a CHILD of the planet
-│   ├── Earth.tsx          # Photographic globe (NASA Blue Marble)
-│   ├── Atmosphere.tsx     # Fresnel halo + limb haze shaders
-│   ├── Stars.tsx          # Restrained layered star field w/ galactic band
-│   ├── Clouds.tsx         # Planet cloud shell + peak cloud banks (reveal)
-│   ├── Terrain.tsx        # Hero Kangchenjunga patch component
-│   ├── Mountains.tsx      # Flanking range patches
-│   ├── CameraController.tsx # Damped choreography + terrain collision clamp
-│   ├── Lighting.tsx       # Sun travel, fog, space→sky background blend
-│   ├── lightingState.ts   # Shared sun direction for shaders
-│   ├── terrainField.ts    # Heightfield + sphere-conforming patch builder ★
-│   └── noise.ts           # Deterministic value-noise / ridged multifractal
-├── systems/
-│   ├── scroll/
-│   │   ├── ScrollProvider.tsx  # Lenis loop → master progress (0→1)
-│   │   ├── scrollState.ts      # Render-free shared progress state
-│   │   └── journey.ts      # Segments, tracks, geo anchors, Earth rotation solve
-│   ├── camera/cameraPath.ts    # Keyframe choreography (absolute + anchored)
-│   └── performance/
-│       ├── quality.ts      # Device tiers (DPR, shadows, geometry, particles)
-│       └── motion.ts       # prefers-reduced-motion
-└── ui/
-    ├── Loader.tsx          # "LOADING EXPERIENCE" state (drei useProgress)
-    ├── Overlay.tsx         # Editorial captions, coordinates, progress rail
-    └── Fallback.tsx        # WebGL-unavailable page
-```
+Real elevation from Copernicus DEM GLO-30 (CC BY 4.0):
 
-**Why the transition has no cuts:** every terrain vertex is re-projected onto
-the globe itself (`terrainField.createPatchGeometry`), and the patches live
-inside the rotating Earth group. The camera dives along the site normal from
-orbit into the mountains on one continuous surface.
+    npm run build:terrain
 
-## Asset interface
+Downloads 1-degree GeoTIFF COGs covering the Sikkim bounding box,
+merges them into a normalized height field, and writes:
 
-- **Earth textures**: `public/assets/textures/earth/{day.jpg,bump.png,water.png,clouds.png}`.
-  URLs are constants at the top of `Earth.tsx` / `Clouds.tsx` — swap in 8K
-  Blue Marble imagery without touching scene code.
-- **Terrain DEM**: currently procedural (`heightAt` in `terrainField.ts`).
-  Drop `public/assets/terrain/heightmap.png` and replace `heightAt` with an
-  image sampler; camera collision, colours and geometry all read that single
-  function.
+- public/assets/terrain/sikkim.dem.bin (Uint16LE, metres)
+- public/assets/terrain/sikkim.dem.json (bounds, min/max, attribution)
 
-## Phase 2 — journey completion + travel experience
-
-The master timeline now runs **SPACE → EARTH APPROACH → HIMALAYAS → KANCHENJUNGA
-REVEAL → MOUNTAIN FLIGHT → SIKKIM ARRIVAL → INTERACTIVE EXPERIENCE** over one
-continuous progress value (see `SEGMENTS` in `systems/scroll/journey.ts`).
-
-At p ≈ 0.85–0.90 the journey-scale terrain crossfades into an interactive
-**relief map of Sikkim** (`experience/sikkimRelief.ts`, `SikkimMap.tsx`,
-`MapMarkers.tsx`) sitting exactly where the flight ended. Destination markers
-and the HTML list in the overlay share one store (`systems/ui/uiStore.ts`);
-selecting a destination eases the camera into a low hover above its marker.
-
-Website routes (React Router):
-
-```
-/                        cinematic journey + interactive map
-/destinations            editorial index
-/destinations/:slug      premium destination page (invalid slugs → 404)
-/experiences             aggregated experiences
-/about · /contact        editorial pages
-*                        NotFound
-```
-
-Destination content is structured data (`src/data/destinations.ts`); imagery is
-local (`public/assets/images/destinations/*-1280.jpg`, Wikimedia Commons,
-CC-sourced) with graceful fallback panels when an asset fails.
+Tiles are cached in ./terrain-cache/ (gitignored).
 
 ## Commands
 
-```bash
-npm install
-npm run dev      # local dev
-npm run build    # tsc -b && vite build
-npm run preview  # serve dist/
-```
+    npm install
+    npm run dev          # local dev server
+    npm run build        # production build
+    npm run preview      # serve dist/
+    npm run build:terrain # regenerate DEM assets
 
-## Phase 3 candidates
+## Architecture
 
-- Replace the stylised Sikkim relief heightfield with a real DEM via the
-  documented `terrainField.ts` asset interface, and wire it into
-  `sikkimRelief.ts` the same way.
+### Cinematic journey (scroll-driven)
+
+The master timeline in systems/scroll/journey.ts defines seven segments:
+SPACE, APPROACH, HIMALAYAS, KANCHENJUNGA REVEAL, MOUNTAIN FLIGHT,
+SIKKIM ARRIVAL, and THE EXPERIENCE. Every system reads the same
+normalized progress value.
+
+### Interactive explorer
+
+When progress reaches the interactive-experience segment, OrbitControls
+activate. The user can orbit, zoom and pan around real DEM terrain.
+
+### Destination dive
+
+Selecting a destination triggers a time-based cinematic camera route
+(DestinationCameraRoute.tsx) through eight stages:
+TARGET LOCK, ORIENTATION, REGIONAL APPROACH, DESCENT, TERRAIN APPROACH,
+DESTINATION REVEAL, ARRIVAL, UI REVEAL.
+
+After arrival, destination information appears as an editorial layer.
+The user can return to the Sikkim overview or select another destination.
+
+### Key files
+
+- src/experience/sikkimWorld.ts — coordinate system + terrain mesh builder
+- src/experience/terrainData.ts — DEM store with synchronous elevation access
+- src/experience/SikkimTerrain.tsx — LOD terrain renderer
+- src/experience/DestinationCameraRoute.tsx — cinematic dive engine
+- src/experience/DestinationEnvironment.tsx — arrival environment patches
+- src/experience/MapMarkers.tsx — geographically attached destination markers
+- src/data/destinations.ts — structured destination configuration
+- src/systems/ui/uiStore.ts — shared UI state (mapActive, selectedId, diving)
+
+## Data sources
+
+See documentation/DATA_SOURCES.md for full attribution.

@@ -1,104 +1,63 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useUiState } from '../systems/ui/uiStore'
 import { DESTINATIONS } from '../data/destinations'
-import {
-  destinationPatchBounds,
-  createTerrainPatchGeometry,
-  surfacePointWorld,
-} from './sikkimWorld'
-import { registerFadeMaterial, unregisterFadeMaterial } from './terrainFade'
-import { QUALITY } from '../systems/performance/quality'
 import { smoothRange } from '../systems/scroll/journey'
 import { scrollState } from '../systems/scroll/scrollState'
 
 /**
- * Destination-specific arrival environments.
+ * Destination arrival atmosphere.
  *
- * When the camera has selected a destination (and the journey has resolved
- * into the interactive phase), this mounts a high-detail terrain patch
- * around that location, adjusts local fog density, and provides the final
- * cinematic viewpoint composition.
+ * TIGHTENS FOG as the camera settles at a destination, creating enclosure
+ * and masking LOD transitions. This component intentionally does NOT mount
+ * its own terrain geometry: all terrain LOD (including per-destination
+ * detail patches) is owned exclusively by SikkimTerrain.tsx. A previous
+ * version mounted a second high-detail patch here, which produced two
+ * coplanar surfaces (z-fighting) and a visibly misplaced rectangular slab
+ * due to a world/earth-local frame mismatch. Do not reintroduce duplicate
+ * terrain geometry here.
  *
- * Only the active destination's environment is loaded — the patch geometry
- * is rebuilt when selection changes and disposed on unmount. This
- * component is a child of the spinning Earth group, so arrival
- * environments are geographically continuous with the rest of the world.
+ * INTEGRATION POINT (future phase): handcrafted arrival assets (hero
+ * composition props, settlement suggestion geometry) should mount inside
+ * this component, georeferenced via sikkimWorld.surfacePointEarthLocal.
  */
 
-const _surfPt = new THREE.Vector3()
+const BASE_FOG_DENSITY = 0.0065
+const ARRIVAL_FOG_DENSITY = 0.014
+
+let fogRef: THREE.FogExp2 | null = null
 
 export default function DestinationEnvironment() {
   const { scene } = useThree()
   const ui = useUiState()
 
-  if (!ui.selectedId || !ui.mapActive) return null
-
-  const dest = DESTINATIONS.find((d) => d.id === ui.selectedId)
-  if (!dest) return null
-
-  return <ArrivalZone dest={dest} scene={scene} arrived={ui.arrived} />
-}
-
-function ArrivalZone({
-  dest,
-  scene,
-  arrived,
-}: {
-  dest: (typeof DESTINATIONS)[number]
-  scene: THREE.Scene
-  arrived: boolean
-}) {
-  const bounds = destinationPatchBounds(dest.coords.lat, dest.coords.lon, 0.1)
-
-  const geo = useMemo(() => {
-    const segs = QUALITY.tier === 'high' ? 160 : QUALITY.tier === 'medium' ? 130 : 100
-    return createTerrainPatchGeometry(bounds, segs)
-  }, [bounds, QUALITY.tier])
-
-  const matRef = useRef<THREE.MeshStandardMaterial>(null)
-
-  // Register with the crossfade so the arrival patch fades in with the world.
+  // Claim the scene fog once so we can restore the baseline on unmount.
   useEffect(() => {
+    const f = scene.fog
+    if (f && 'density' in f) fogRef = f as THREE.FogExp2
     return () => {
-      if (matRef.current) unregisterFadeMaterial(matRef.current)
-      geo.dispose()
+      if (fogRef) fogRef.density = BASE_FOG_DENSITY
+      fogRef = null
     }
-  }, [geo])
+  }, [scene])
 
-  // Compute the patch position once (Earth rotation at interactive phase
-  // is effectively fixed at p=0.92, so the surface point is stable).
-  const patchPos = useMemo(() => {
-    const p = 0.95
-    surfacePointWorld(p, dest.coords.lat, dest.coords.lon, 0, _surfPt)
-    return _surfPt.clone()
-  }, [dest.coords.lat, dest.coords.lon])
+  const dest = ui.selectedId ? DESTINATIONS.find((d) => d.id === ui.selectedId) : null
 
-  // Tighten fog as the camera settles at the destination — creates enclosure
-  // and masks any LOD transition.
   useFrame(() => {
-    if (!arrived) return
-    const fog = scene.fog
-    if (fog && 'density' in fog) {
-      const p = scrollState.progress
-      const arrival = smoothRange(p, 0.92, 1.0)
-      ;(fog as THREE.FogExp2).density = 0.014 * arrival
+    if (!fogRef) return
+    const p = scrollState.progress
+    if (!ui.selectedId || !ui.arrived) {
+      // Explorer overview baseline (matches Lighting's late-journey track).
+      fogRef.density += (0.0075 - fogRef.density) * 0.05
+      return
     }
+    // Arrived: enclose the viewpoint. Blend in over the settle window.
+    const settle = smoothRange(p, 0.92, 1.0)
+    const target = BASE_FOG_DENSITY + (ARRIVAL_FOG_DENSITY - BASE_FOG_DENSITY) * settle
+    fogRef.density += (target - fogRef.density) * 0.04
   })
 
-  return (
-    <group>
-      <mesh geometry={geo} position={patchPos}>
-        <meshStandardMaterial
-          ref={matRef}
-          vertexColors
-          transparent
-          opacity={0}
-          roughness={0.94}
-          metalness={0}
-        />
-      </mesh>
-    </group>
-  )
+  void dest // destination-specific atmosphere tuning arrives with handcrafted assets
+  return null
 }
